@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"uniswaptgbot/config"
 
@@ -13,6 +14,7 @@ import (
 
 func main() {
 	nodeUrl := config.Config("ETHEREUM_NODE_URL")
+	fmt.Println(nodeUrl)
 	client, err := ethclient.Dial(nodeUrl)
 	if err != nil {
 		panic(err)
@@ -44,9 +46,9 @@ func main() {
 					//Check wheter it's ERC20 token
 					if isERC20(contractAddr, client) {
 						// Get token information
-						log.Printf("New Token Deployed!")
-						log.Printf("Deployer Address: %s", deployer.Hex())
-						log.Printf("Contract Address: %s", contractAddr.Hex())
+						fmt.Println("New Token Deployed!")
+						fmt.Printf("Deployer Address: %s\n", deployer.Hex())
+						fmt.Printf("Contract Address: %s\n", contractAddr.Hex())
 						// log.Printf("Token Name: %s", tokenName)
 						// log.Printf("Total Supply: %s", totalSupply.String())
 					}
