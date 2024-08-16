@@ -2,10 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log"
+	"math/big"
+	"strings"
 	"uniswaptgbot/config"
+	"uniswaptgbot/erc20"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -44,15 +49,19 @@ func main() {
 					}
 					contractAddr := crypto.CreateAddress(deployer, tx.Nonce())
 					//Check wheter it's ERC20 token
-					if isERC20(contractAddr, client) {
+					bERC20 := isERC20(contractAddr, client)
+					if bERC20 {
 						// Get token information
 						fmt.Println("New Token Deployed!")
 						fmt.Printf("Deployer Address: %s\n", deployer.Hex())
 						fmt.Printf("Contract Address: %s\n", contractAddr.Hex())
-						// log.Printf("Token Name: %s", tokenName)
-						// log.Printf("Total Supply: %s", totalSupply.String())
+						name, totSupply, err := getTokenInfo(contractAddr, client)
+						if err != nil {
+							fmt.Println("Error getting token info")
+						}
+						fmt.Printf("Token Name: %s", name)
+						fmt.Printf("Total Supply: %s", totSupply.String())
 					}
-
 				}
 			}
 		}
@@ -64,5 +73,50 @@ func isERC20(contractAddr common.Address, client *ethclient.Client) bool {
 	if err != nil {
 		log.Fatalf("Failed to retrieve contract code: %v", err)
 	}
-	return len(code) > 0
+	if len(code) == 0 {
+		log.Fatalf("no contract code at given address")
+		return false
+	}
+
+	hexCode := hex.EncodeToString(code)
+
+	var erc20Signatures = []string{
+		"18160ddd", // totalSupply()
+		"70a08231", // balanceOf(address)
+		"a9059cbb", // transfer(address,uint256)
+		"23b872dd", // transferFrom(address,address,uint256)
+		"095ea7b3", // approve(address,uint256)
+		"dd62ed3e", // allowance(address,address)
+	}
+
+	for _, sig := range erc20Signatures {
+		if !strings.Contains(hexCode, sig) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func getTokenInfo(contractAddr common.Address, client *ethclient.Client) (string, *big.Int, error) {
+	instance, err := erc20.NewGGToken(contractAddr, client)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//Get token name
+	name, err := instance.Name(&bind.CallOpts{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Token Name: %s\n", name)
+
+	//Get total Supply
+	totalSupply, err := instance.TotalSupply(&bind.CallOpts{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Total Supply: %s\n", totalSupply.String())
+
+	return name, totalSupply, nil
 }
