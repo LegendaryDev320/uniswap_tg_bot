@@ -7,7 +7,6 @@ import (
 	"log"
 	"math/big"
 	"strings"
-	"sync"
 	"uniswaptgbot/config"
 	"uniswaptgbot/erc20"
 
@@ -62,21 +61,27 @@ func main() {
 						continue
 					}
 					contractAddr := crypto.CreateAddress(deployer, tx.Nonce())
+					deployer_balance, err := client.BalanceAt(context.Background(), deployer, nil)
+					if err != nil {
+						fmt.Printf("Failed to retrieve deployer balance: %v\n", err)
+						continue
+					}
 					//Check wheter it's ERC20 token
 					bERC20 := isERC20(contractAddr, client)
 					if bERC20 {
 						// Get token information
 						fmt.Println("New Token Deployed!")
 						fmt.Printf("Deployer Address: %s\n", deployer.Hex())
+						fmt.Printf("Deployer Balance: %s\n", deployer_balance.String())
 						fmt.Printf("Contract Address: %s\n", contractAddr.Hex())
-						name, totSupply, err := getTokenInfo(contractAddr, client)
+						name, totSupply, decimals, symbol, err := getTokenInfo(contractAddr, client)
 						if err != nil {
 							fmt.Printf("Error getting token info: %s\n", err)
 							continue
 						}
 						fmt.Printf("Token Name: %s", name)
 						fmt.Printf("Total Supply: %s", totSupply.String())
-						sql.Query("INSERT INTO ethereum (name, total_supply) VALUES (?, ?)", name, totSupply.String())
+						sql.Query("INSERT INTO ethereum (name, total_supply, symbol, decimals, deployer, deployer_balance) VALUES (?, ?)", name, totSupply.String(), symbol, decimals, deployer.Hex(), deployer_balance.String())
 					}
 				}
 			}
@@ -114,42 +119,39 @@ func isERC20(contractAddr common.Address, client *ethclient.Client) bool {
 	return true
 }
 
-func getTokenInfo(contractAddr common.Address, client *ethclient.Client) (string, *big.Int, error) {
+func getTokenInfo(contractAddr common.Address, client *ethclient.Client) (string, *big.Int, uint8, string, error) {
 	instance, err := erc20.NewGGToken(contractAddr, client)
 	if err != nil {
 		log.Printf("Failed to instantiate contract: %v\n", err)
-		return "", nil, err
+		return "", nil, 0, "", err
 	}
-	fmt.Printf("!!!!--1")
 	//Get token name
 	name, err := instance.Name(&bind.CallOpts{})
 	if err != nil {
 		log.Printf("Failed to retrieve token name: %v\n", err)
-		return "", nil, err
+		return "", nil, 0, "", err
 	}
 	fmt.Printf("Token Name: %s\n", name)
-	fmt.Printf("!!!!--2")
 	//Get total Supply
 	totalSupply, err := instance.TotalSupply(&bind.CallOpts{})
 	if err != nil {
 		log.Printf("Failed to retrieve total supply: %v\n", err)
-		return "", nil, err
+		return "", nil, 0, "", err
 	}
 	fmt.Printf("Total Supply: %s\n", totalSupply.String())
 	//Get decimals
 	decimals, err := instance.Decimals(&bind.CallOpts{})
 	if err != nil {
 		log.Printf("Failed to retrieve decimals: %v\n", err)
-		return "", nil, err
+		return "", nil, 0, "", err
 	}
-	fmt.Printf("Decimals: %s\n", decimals)
+	fmt.Printf("Decimals: %v\n", decimals)
 	//Get symbol
 	symbol, err := instance.Symbol(&bind.CallOpts{})
 	if err != nil {
 		log.Printf("Failed to retrieve symbol: %v\n", err)
-		return "", nil, err
+		return "", nil, 0, "", err
 	}
 	fmt.Printf("Symbol: %s\n", symbol)
-	fmt.Printf("!!!!---3")
-	return name, totalSupply, nil
+	return name, totalSupply, decimals, symbol, nil
 }
